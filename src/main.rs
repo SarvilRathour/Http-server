@@ -19,6 +19,14 @@ fn handle_client(mut stream: TcpStream)->io::Result<()>{
     let mut response = "HTTP/1.1 200 OK\r\n\r\n";
     stream.write_all(response.as_bytes());
     let specific_path:Vec<_>=http_request[0].split_whitespace().collect();
+    if specific_path[1].contains("/user-agent"){
+        let got_header=&http_request[3];
+        let returned_values:Vec<&str>=got_header.split(":").collect();
+        let returned_value=returned_values[1].trim();
+        let passing_return=format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",returned_value.len(),returned_value);
+        stream.write_all(passing_return.as_bytes());
+        return Ok(());
+    }
     if specific_path[1].contains("/echo"){
          let parts_path:Vec<_>=specific_path[1].split("/").collect();
          let lenght_returned=parts_path[2].len();
@@ -37,7 +45,6 @@ fn handle_client(mut stream: TcpStream)->io::Result<()>{
 }
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
-
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
         handle_client(stream);
