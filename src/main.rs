@@ -2,6 +2,7 @@ use std::io::prelude::*;
 use std::io::{self, BufRead as _, BufReader, Write};
 #[allow(unused_imports)]
 use std::net::{TcpListener, TcpStream};
+use std::{thread};
 //This is what i got in http_request
 // Request: [
 //     "GET /test/path HTTP/1.1",
@@ -39,15 +40,19 @@ fn handle_client(mut stream: TcpStream)->io::Result<()>{
         "GET / HTTP/1.1" => stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n"),
         _ => stream.write_all(b"HTTP/1.1 400 BAD REQUEST\r\n\r\n"),
     };
-    println!("{:?}",specific_path);
+    // println!("{:?}",specific_path);
     Ok(())
     // buf_reader.read_line(&mut url_path);
 }
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
+    let mut total_connection=0;
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
-        handle_client(stream);
+        println!("recieved a connection");
+        total_connection+=1;
+        println!("{}",total_connection);
+        thread::spawn(move ||{handle_client(stream);});
         // stream.write_all("HTTP/1.1 200 OK\r\n\r\n".as_bytes()).unwrap();
     }
 }
