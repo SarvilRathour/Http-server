@@ -1,6 +1,7 @@
 use std::fs;
+use std::io;
 use std::io::prelude::*;
-use std::io::{self, BufRead as _, BufReader, Write};
+use std::io::{BufReader, Write};
 #[allow(unused_imports)]
 use std::net::{TcpListener, TcpStream};
 use std::thread;
@@ -13,14 +14,17 @@ use std::thread;
 // ]
 fn handle_client(mut stream: TcpStream) -> io::Result<()> {
     let mut buf_reader = BufReader::new(&mut stream);
-    let http_request: Vec<_> = buf_reader
+    let http_request: Vec<_> = (&mut buf_reader)
         .lines()
         .map(|result| result.unwrap())
         .take_while(|line| !line.is_empty())
         .collect();
-    let mut response = "HTTP/1.1 200 OK\r\n\r\n";
-    stream.write_all(response.as_bytes());
+    // println!("{:?}",http_request);
+    // let mut response = "HTTP/1.1 200 OK\r\n\r\n";
+    // stream.write_all(response.as_bytes());
     let specific_path: Vec<_> = http_request[0].split_whitespace().collect();
+    //this produces this output ---- ["POST", "/sarvil", "HTTP/1.1"]
+    // println!("{:?}", specific_path);
     if specific_path[1].contains("/user-agent") {
         let got_header = &http_request[3];
         let returned_values: Vec<&str> = got_header.split(":").collect();
@@ -34,30 +38,61 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
         return Ok(());
     }
     if specific_path[1].contains("/files") {
-        // println!("connection is asking for files");
-        let impure_destination = specific_path[1].split_once("/files/");
-        let pure_destination = match impure_destination {
-            Some((_, inneed)) => inneed,
-            None => "",
-        };
-        let message_send: String = match fs::read_to_string(pure_destination) {
-            Ok(message) => {
-                format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}",
-                    message.len(),
-                    message
-                )
-            }
-            Err(_) => {
-                
-                format!(
-                    "HTTP/1.1 404 Not Found\r\n\r\n",
-                    
-                )
-            }
-        };
+        match specific_path[0] {
+            "GET" => {
+                let impure_destination = specific_path[1].split_once("/files/");
+                let pure_destination = match impure_destination {
+                    Some((_, inneed)) => inneed,
+                    None => "",
+                };
+                let message_send: String = match fs::read_to_string(pure_destination) {
+                    Ok(message) => {
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}",
+                            message.len(),
+                            message
+                        )
+                    }
+                    Err(_) => {
+                        format!("HTTP/1.1 404 Not Found\r\n\r\n")
+                    }
+                };
 
-        stream.write_all(message_send.as_bytes());
+                stream.write_all(message_send.as_bytes());
+            }
+            "POST" => {
+                let impure_destination = specific_path[1].split_once("/files/");
+                let pure_destination = match impure_destination {
+                    Some((_, inneed)) => inneed,
+                    None => "",
+                };
+                println!("{}", pure_destination);
+                let mut f = fs::File::create(pure_destination).unwrap();
+                // ["POST /files/testingcreation HTTP/1.1", "Host: localhost:4221", "User-Agent: curl/8.13.0", "Accept: */*", "Content-Length: 27", "Content-Type: application/x-www-form-urlencoded"]
+                //taking content length from here
+                let content_len: u32 = http_request[4]
+                    .split(":")
+                    .nth(1)
+                    .unwrap()
+                    .trim()
+                    .parse()
+                    .unwrap();
+                println!("{}", content_len);
+                let mut body_buf = vec![0u8; content_len as usize];
+                buf_reader.read_exact(&mut body_buf)?;
+                // let body=String::from_utf8(body_buf).unwrap();
+                f.write_all(&body_buf);
+                let response = format!(
+                    "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"
+                );
+                stream.write_all(response.as_bytes())
+            }?,
+            _ => {
+                println!("error");
+            }
+        };
+        // println!("connection is asking for files");
+        return Ok(());
     }
     // println!("{:?}",specific_path[1]);
     if specific_path[1].contains("/echo") {
@@ -83,7 +118,7 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
     // let mut total_connection=0;
     for stream in listener.incoming() {
-        let mut stream = stream.unwrap();
+        let stream = stream.unwrap();
         // println!("recieved a connection");
         // total_connection+=1;
         // println!("{}",total_connection);
